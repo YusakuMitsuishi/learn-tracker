@@ -1,0 +1,554 @@
+@startuml シーケンス図 - TODO登録と進捗記録
+
+skinparam backgroundColor #FAFAFA
+skinparam sequenceMessageAlign center
+
+title TODO登録と進捗記録のシーケンス
+
+actor User as user
+participant "React App" as react
+participant "Redux Store" as redux
+participant "API Client" as api
+participant "Express API" as express
+participant "Todo Service" as service
+database "MongoDB" as db
+database "Redis" as cache
+
+== TODO登録フロー ==
+
+user -> react : TODO作成フォーム入力
+activate react
+
+react -> react : バリデーション
+react -> redux : dispatch(createTodo)
+activate redux
+
+redux -> api : POST /api/todos
+activate api
+
+api -> express : HTTP Request
+activate express
+
+express -> express : 認証チェック
+express -> express : リクエストバリデーション
+express -> service : createTodo(data)
+activate service
+
+service -> db : todos.insert()
+activate db
+db --> service : 保存完了
+deactivate db
+
+service -> cache : キャッシュ無効化
+activate cache
+cache --> service : OK
+deactivate cache
+
+service --> express : Created Todo
+deactivate service
+
+express --> api : 201 Created + Todo
+deactivate express
+
+api --> redux : Success Response
+deactivate api
+
+redux -> redux : 状態更新
+redux --> react : 更新完了
+deactivate redux
+
+react -> react : UI更新
+react --> user : TODO作成完了表示
+deactivate react
+
+== 進捗記録フロー ==
+
+user -> react : 進捗値を入力
+activate react
+
+react -> redux : dispatch(recordProgress)
+activate redux
+
+redux -> api : POST /api/progress
+activate api
+
+api -> express : HTTP Request
+activate express
+
+express -> express : 認証・バリデーション
+express -> service : recordProgress(data)
+activate service
+
+service -> db : progress.insert()
+activate db
+db --> service : 保存完了
+deactivate db
+
+service -> db : todos.update(currentValue)
+activate db
+db --> service : 更新完了
+deactivate db
+
+service -> service : 目標達成判定
+alt 目標達成
+    service -> service : 実績チェック
+    service -> db : achievements.update()
+    activate db
+    db --> service : 実績解除
+    deactivate db
+end
+
+service -> cache : 統計キャッシュ更新
+activate cache
+cache --> service : OK
+deactivate cache
+
+service --> express : Success + Achievement
+deactivate service
+
+express --> api : 200 OK + Data
+deactivate express
+
+api --> redux : Success Response
+deactivate api
+
+redux -> redux : 状態更新
+redux --> react : 更新完了
+deactivate redux
+
+alt 目標達成 or 実績解除
+    react -> react : 演出トリガー
+    react --> user : 祝福演出表示 🎉
+else 通常記録
+    react --> user : 進捗記録完了
+end
+
+deactivate react
+
+@enduml
+
+@startuml シーケンス図 - ディスプレイモード画面切り替え
+
+skinparam backgroundColor #FAFAFA
+skinparam sequenceMessageAlign center
+
+title ディスプレイモード - 自動画面切り替え
+
+actor User as user
+participant "Display Container" as display
+participant "Redux Store" as redux
+participant "API Client" as api
+participant "Express API" as express
+database "MongoDB" as db
+database "Redis" as cache
+
+user -> display : ディスプレイモード開始
+activate display
+
+display -> redux : dispatch(startDisplayMode)
+activate redux
+
+redux -> redux : isAutoPlay = true
+redux --> display : モード開始
+deactivate redux
+
+loop 10秒間隔（設定可能）
+    display -> display : 画面切り替えタイマー
+
+    alt 画面1: 本日のTODOリスト
+        display -> redux : getTodayTodos()
+        activate redux
+        redux -> api : GET /api/todos/today
+        activate api
+        api -> express : HTTP Request
+        activate express
+
+        express -> cache : キャッシュチェック
+        activate cache
+        alt キャッシュヒット
+            cache --> express : キャッシュデータ
+        else キャッシュミス
+            deactivate cache
+            express -> db : todos.find({userId, date: today})
+            activate db
+            db --> express : Todo[]
+            deactivate db
+            express -> cache : キャッシュ保存
+            activate cache
+            cache --> express : OK
+            deactivate cache
+        end
+
+        express --> api : 200 OK + Todos
+        deactivate express
+        api --> redux : Success
+        deactivate api
+        redux --> display : TODO データ
+        deactivate redux
+        display -> display : TODO リスト表示
+        display --> user : 本日のTODO表示
+
+    else 画面2: 進捗状況
+        display -> redux : getTodayProgress()
+        activate redux
+        redux -> api : GET /api/progress/date/:today
+        activate api
+        api -> express : HTTP Request
+        activate express
+        express -> db : progress.find()
+        activate db
+        db --> express : Progress[]
+        deactivate db
+        express --> api : 200 OK + Progress
+        deactivate express
+        api --> redux : Success
+        deactivate api
+        redux --> display : 進捗データ
+        deactivate redux
+        display -> display : グラフ描画
+        display --> user : 進捗グラフ表示 📊
+
+    else 画面3: 継続カレンダー
+        display -> redux : getStreakData()
+        activate redux
+        redux -> api : GET /api/stats/streak
+        activate api
+        api -> express : HTTP Request
+        activate express
+
+        express -> cache : streak:{userId}
+        activate cache
+        alt キャッシュあり
+            cache --> express : Streak Data
+        else キャッシュなし
+            deactivate cache
+            express -> db : stats.aggregate()
+            activate db
+            db --> express : 集計結果
+            deactivate db
+            express -> cache : キャッシュ保存
+            activate cache
+            cache --> express : OK
+            deactivate cache
+        end
+
+        express --> api : 200 OK + Streak
+        deactivate express
+        api --> redux : Success
+        deactivate api
+        redux --> display : 継続データ
+        deactivate redux
+        display -> display : ヒートマップ描画
+        display --> user : 継続カレンダー表示 📅
+
+    else 画面4: 統計・レポート
+        display -> redux : getWeeklyStats()
+        activate redux
+        redux -> api : GET /api/stats/weekly
+        activate api
+        api -> express : HTTP Request
+        activate express
+        express -> db : stats.aggregate()
+        activate db
+        db --> express : 週次統計
+        deactivate db
+        express --> api : 200 OK + Stats
+        deactivate express
+        api --> redux : Success
+        deactivate api
+        redux --> display : 統計データ
+        deactivate redux
+        display -> display : チャート描画
+        display --> user : 週次レポート表示 📈
+
+    else 画面5: 応援メッセージ
+        display -> display : 日替わりメッセージ生成
+        display -> display : アニメーション再生
+        display --> user : 励ましメッセージ表示 💪
+    end
+
+    display -> display : 次の画面へ遷移
+end
+
+user -> display : ディスプレイモード終了
+display -> redux : dispatch(stopDisplayMode)
+activate redux
+redux -> redux : isAutoPlay = false
+redux --> display : モード終了
+deactivate redux
+
+display --> user : 通常モードへ戻る
+deactivate display
+
+@enduml
+
+@startuml シーケンス図 - 実績解除と演出
+
+skinparam backgroundColor #FAFAFA
+skinparam sequenceMessageAlign center
+
+title 実績（Achievement）解除と演出フロー
+
+actor User as user
+participant "React App" as react
+participant "Achievement Service\n(Frontend)" as achFront
+participant "API Client" as api
+participant "Express API" as express
+participant "Achievement Service\n(Backend)" as achBack
+database "MongoDB" as db
+participant "Notification Service" as notify
+participant "Celebration Component" as celebration
+
+user -> react : 進捗記録完了
+activate react
+
+react -> api : POST /api/progress
+activate api
+
+api -> express : HTTP Request
+activate express
+
+express -> achBack : checkAchievements(userId, action)
+activate achBack
+
+achBack -> db : achievements.find({userId, unlocked: false})
+activate db
+db --> achBack : 未解除の実績リスト
+deactivate db
+
+loop 各実績の条件チェック
+    achBack -> achBack : 条件評価
+
+    alt 7日連続達成
+        achBack -> db : stats.find({userId}).sort({date: -1}).limit(7)
+        activate db
+        db --> achBack : 直近7日分の統計
+        deactivate db
+        achBack -> achBack : 連続性チェック
+
+        alt 7日連続でTODO達成
+            achBack -> db : achievements.update({_id, unlocked: true})
+            activate db
+            db --> achBack : 実績解除
+            deactivate db
+            achBack -> achBack : unlockedAchievements.push()
+        end
+
+    else 累計100時間達成
+        achBack -> db : progress.aggregate([{$match: {userId}}, {$group: {totalTime}}])
+        activate db
+        db --> achBack : 累計時間
+        deactivate db
+
+        alt 累計100時間以上
+            achBack -> db : achievements.update()
+            activate db
+            db --> achBack : 実績解除
+            deactivate db
+            achBack -> achBack : unlockedAchievements.push()
+        end
+
+    else マイルストーン達成
+        achBack -> achBack : 目標値と実績値を比較
+
+        alt 目標達成
+            achBack -> db : achievements.update()
+            activate db
+            db --> achBack : 実績解除
+            deactivate db
+            achBack -> achBack : unlockedAchievements.push()
+        end
+    end
+end
+
+alt 実績が解除された
+    achBack -> notify : scheduleNotification(achievement)
+    activate notify
+    notify -> db : notifications.insert()
+    activate db
+    db --> notify : 通知保存
+    deactivate db
+    notify --> achBack : 通知予約完了
+    deactivate notify
+end
+
+achBack --> express : {progress, achievements: unlockedAchievements}
+deactivate achBack
+
+express --> api : 200 OK + Data
+deactivate express
+
+api --> react : Success Response
+deactivate api
+
+alt 新しい実績が解除された
+    react -> achFront : processAchievements(achievements)
+    activate achFront
+
+    loop 各実績
+        achFront -> celebration : showCelebration(achievement)
+        activate celebration
+
+        celebration -> celebration : アニメーション開始
+        celebration -> celebration : 効果音再生 🎵
+        celebration -> celebration : 紙吹雪エフェクト 🎊
+
+        celebration --> user : 「おめでとうございます！」\n「7日連続達成！」
+
+        celebration -> celebration : バッジ表示
+        celebration --> user : バッジアイコン表示 🏆
+
+        par アニメーション並列実行
+            celebration -> celebration : フェードイン/アウト
+        and
+            celebration -> celebration : スケールアニメーション
+        and
+            celebration -> celebration : パーティクルエフェクト
+        end
+
+        note right of celebration
+          演出時間: 約5秒
+          （設定でスキップ可能）
+        end note
+
+        deactivate celebration
+    end
+
+    achFront --> react : 演出完了
+    deactivate achFront
+end
+
+react --> user : 通常画面に戻る
+deactivate react
+
+@enduml
+
+@startuml シーケンス図 - オフライン同期
+
+skinparam backgroundColor #FAFAFA
+skinparam sequenceMessageAlign center
+
+title オフライン対応とデータ同期
+
+actor User as user
+participant "React App" as react
+participant "Redux Store" as redux
+participant "IndexedDB" as idb
+participant "Sync Middleware" as sync
+participant "API Client" as api
+participant "Express API" as express
+database "MongoDB" as db
+
+== オフライン時の操作 ==
+
+user -> react : 進捗記録（オフライン）
+activate react
+
+react -> redux : dispatch(recordProgress)
+activate redux
+
+redux -> sync : middleware処理
+activate sync
+
+sync -> sync : ネットワーク状態チェック
+sync -> sync : isOnline = false
+
+sync -> idb : pendingSync.add({type: 'progress', data})
+activate idb
+idb --> sync : 保存完了
+deactivate idb
+
+sync -> idb : progress.add(data)
+activate idb
+idb --> sync : ローカル保存完了
+deactivate idb
+
+sync --> redux : オフライン保存完了
+deactivate sync
+
+redux -> redux : 楽観的UI更新
+redux --> react : 更新完了（ローカルのみ）
+deactivate redux
+
+react --> user : 「オフラインで保存しました」\n「オンライン時に自動同期します」
+deactivate react
+
+== オンライン復帰時の同期 ==
+
+react -> react : Online イベント検知
+activate react
+
+react -> sync : dispatch(syncPendingData)
+activate sync
+
+sync -> idb : pendingSync.getAll()
+activate idb
+idb --> sync : 未同期データリスト
+deactivate idb
+
+loop 各未同期データ
+    sync -> api : POST /api/progress
+    activate api
+
+    api -> express : HTTP Request
+    activate express
+
+    express -> express : タイムスタンプ重複チェック
+
+    alt データが既に存在（他デバイスで同期済み）
+        express --> api : 409 Conflict
+        sync -> sync : スキップ
+    else 新しいデータ
+        express -> db : progress.insert()
+        activate db
+        db --> express : 保存完了
+        deactivate db
+
+        express --> api : 201 Created
+        deactivate express
+
+        api --> sync : Success
+        deactivate api
+
+        sync -> idb : pendingSync.delete(id)
+        activate idb
+        idb --> sync : 削除完了
+        deactivate idb
+    end
+end
+
+sync -> api : GET /api/progress/sync?since={lastSyncTime}
+activate api
+
+api -> express : HTTP Request
+activate express
+
+express -> db : progress.find({updatedAt: {$gt: lastSyncTime}})
+activate db
+db --> express : 他デバイスからの新規データ
+deactivate db
+
+express --> api : 200 OK + Data
+deactivate express
+
+api --> sync : Success
+deactivate api
+
+sync -> idb : progress.bulkPut(newData)
+activate idb
+idb --> sync : ローカルDB更新完了
+deactivate idb
+
+sync -> redux : dispatch(syncCompleted)
+activate redux
+redux -> redux : 状態を最新に更新
+redux --> sync : 完了
+deactivate redux
+
+sync --> react : 同期完了
+deactivate sync
+
+react --> user : 「データを同期しました」✅
+deactivate react
+
+@enduml

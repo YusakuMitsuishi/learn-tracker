@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm -v:*)",
+      "Bash(docker --version:*)",
+      "Bash(supabase --version:*)",
+      "Bash(npm install:*)",
+      "Bash(scoop --version:*)",
+      "Bash(pnpm create:*)",
+      "Bash(timeout 5 pnpm create:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(cat:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

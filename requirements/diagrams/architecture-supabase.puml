@@ -1,0 +1,257 @@
+@startuml Supabase + Vercel システムアーキテクチャ図
+
+!define RECTANGLE_COLOR #4A90E2
+!define DATABASE_COLOR #3ECF8E
+!define SERVICE_COLOR #FF6B6B
+
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+
+title 学習継続支援アプリ - Supabase + Vercel アーキテクチャ
+
+' クライアント層
+package "クライアント層" {
+    [Webブラウザ] <<PWA>> #FFEB3B
+    [Service Worker] <<PWA>> #FFA726
+    [IndexedDB] <<Offline Storage>> #66BB6A
+}
+
+' フロントエンド層（Vercel）
+cloud "Vercel（無料プラン）" #5C6BC0 {
+    package "Next.js Application" {
+        component "App Router" as AppRouter #4A90E2 {
+            [Display Mode Page]
+            [Input Mode Page]
+            [Stats Page]
+            [Settings Page]
+        }
+
+        component "React Components" as ReactComponents #5C6BC0 {
+            [Display Components]
+            [TODO Components]
+            [Stats Components]
+            [Celebration Components]
+        }
+
+        component "State Management" as StateManagement #7E57C2 {
+            [Zustand Stores]
+        }
+
+        component "Supabase Client" as SupabaseClient #3ECF8E {
+            [Browser Client]
+            [Server Client]
+            [Realtime Client]
+        }
+    }
+}
+
+' バックエンド層（Supabase）
+cloud "Supabase（無料プラン）" #3ECF8E {
+    component "Supabase Services" {
+        [Auth Service] <<認証>> #FFA000
+        [Realtime Service] <<WebSocket>> #00ACC1
+        [Storage Service] <<ファイル>> #FF6F00
+        [Edge Functions] <<サーバーレス>> #AB47BC
+    }
+
+    component "PostgREST API" as PostgREST #EC407A {
+        [Auto-generated REST API]
+        [Row Level Security]
+    }
+
+    database "PostgreSQL" as PostgreSQL #50C878 {
+        [profiles]
+        [todos]
+        [progress]
+        [achievements]
+        [stats]
+        [settings]
+    }
+}
+
+' 接続関係
+[Webブラウザ] --> [Service Worker] : PWA機能
+[Webブラウザ] --> AppRouter : ユーザー操作
+[Service Worker] --> [IndexedDB] : オフラインデータ
+
+AppRouter --> ReactComponents : レンダリング
+ReactComponents --> StateManagement : 状態管理
+StateManagement --> SupabaseClient : データ操作
+SupabaseClient --> [IndexedDB] : ローカルキャッシュ
+
+SupabaseClient -down-> [Auth Service] : 認証リクエスト
+SupabaseClient -down-> [Realtime Service] : リアルタイム同期
+SupabaseClient -down-> PostgREST : データCRUD
+SupabaseClient -down-> [Storage Service] : ファイルアップロード
+SupabaseClient -down-> [Edge Functions] : 複雑な処理
+
+[Auth Service] --> PostgreSQL : ユーザー管理
+[Realtime Service] --> PostgreSQL : 変更通知
+PostgREST --> PostgreSQL : データアクセス
+[Edge Functions] --> PostgreSQL : データ操作
+
+note right of "Vercel（無料プラン）"
+  **無料プランの制限:**
+  - 帯域幅: 100GB/月
+  - ビルド時間: 6,000分/月
+  - サーバーレス実行: 100GB-時間
+
+  **特徴:**
+  - 自動デプロイ（GitHub連携）
+  - グローバルCDN
+  - HTTPS自動設定
+end note
+
+note right of "Supabase（無料プラン）"
+  **無料プランの制限:**
+  - DB容量: 500MB
+  - ストレージ: 1GB
+  - 帯域幅: 2GB/月
+  - MAU: 50,000ユーザー
+
+  **特徴:**
+  - PostgreSQL完全機能
+  - リアルタイム同期
+  - 自動生成REST API
+  - Row Level Security
+end note
+
+note bottom of PostgreSQL
+  **Row Level Security (RLS):**
+  ユーザーは自分のデータのみ
+  アクセス可能（DB層でセキュリティ）
+
+  **リアルタイム:**
+  WebSocketでデータ変更を
+  自動的にクライアントへ通知
+end note
+
+note right of [IndexedDB]
+  **オフライン対応:**
+  - ローカルにデータキャッシュ
+  - オフライン時も操作可能
+  - オンライン復帰時に自動同期
+end note
+
+@enduml
+
+@startuml データフロー図
+
+skinparam backgroundColor #FAFAFA
+
+title データフロー - オンライン/オフライン
+
+actor User as user
+participant "Next.js App" as app
+participant "Zustand Store" as store
+participant "Supabase Client" as supabase
+participant "IndexedDB" as idb
+database "PostgreSQL" as db
+
+== オンライン時の操作 ==
+
+user -> app : TODO作成
+activate app
+
+app -> store : dispatch(createTodo)
+activate store
+
+store -> supabase : insert todo
+activate supabase
+
+supabase -> db : INSERT INTO todos
+activate db
+db --> supabase : Success
+deactivate db
+
+supabase --> store : Created Todo
+deactivate supabase
+
+store -> idb : キャッシュ保存
+activate idb
+idb --> store : OK
+deactivate idb
+
+store --> app : 状態更新
+deactivate store
+
+app --> user : 作成完了表示
+deactivate app
+
+== リアルタイム同期（他デバイス） ==
+
+db -> supabase : 変更通知
+activate supabase
+
+supabase -> app : WebSocket通知
+activate app
+
+app -> store : データ更新
+activate store
+store -> idb : キャッシュ更新
+store --> app : UI更新
+deactivate store
+
+app --> user : 自動更新表示
+deactivate app
+deactivate supabase
+
+== オフライン時の操作 ==
+
+user -> app : 進捗記録（オフライン）
+activate app
+
+app -> store : dispatch(recordProgress)
+activate store
+
+store -> store : ネットワークチェック\nisOnline = false
+
+store -> idb : ローカル保存\n+ pendingSyncキューに追加
+activate idb
+idb --> store : 保存完了
+deactivate idb
+
+store --> app : 楽観的UI更新
+deactivate store
+
+app --> user : 「オフラインで保存」通知
+deactivate app
+
+== オンライン復帰時 ==
+
+app -> app : Online イベント検知
+activate app
+
+app -> store : syncPendingChanges()
+activate store
+
+store -> idb : pendingSyncキュー取得
+activate idb
+idb --> store : 未同期データ
+deactivate idb
+
+loop 各未同期データ
+    store -> supabase : データ送信
+    activate supabase
+
+    supabase -> db : INSERT/UPDATE
+    activate db
+    db --> supabase : Success
+    deactivate db
+
+    supabase --> store : 同期完了
+    deactivate supabase
+
+    store -> idb : pendingSyncから削除
+    activate idb
+    idb --> store : OK
+    deactivate idb
+end
+
+store --> app : 同期完了
+deactivate store
+
+app --> user : 「同期完了」通知
+deactivate app
+
+@enduml

@@ -1,0 +1,127 @@
+@startuml システムアーキテクチャ図
+
+!define RECTANGLE_COLOR #4A90E2
+!define DATABASE_COLOR #50C878
+!define SERVICE_COLOR #FF6B6B
+
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+
+title 学習継続支援アプリ - システムアーキテクチャ
+
+' クライアント層
+package "クライアント層" {
+    [Webブラウザ] <<PWA>> #FFEB3B
+    [Service Worker] <<PWA>> #FFA726
+    [IndexedDB] <<Local Storage>> #66BB6A
+}
+
+' フロントエンド層
+package "フロントエンド層" {
+    component "React Application" as ReactApp #4A90E2 {
+        [Display Mode]
+        [Input Mode]
+        [Stats Dashboard]
+        [Settings]
+    }
+
+    component "State Management" as StateManagement #5C6BC0 {
+        [Redux Store]
+        [Middleware]
+    }
+
+    component "Services" as FrontServices #7E57C2 {
+        [API Client]
+        [Firebase Client]
+        [Notification Service]
+    }
+}
+
+' バックエンド層
+package "バックエンド層" {
+    component "Express.js API Server" as ExpressAPI #FF6B6B {
+        [Auth Routes]
+        [Todo Routes]
+        [Progress Routes]
+        [Stats Routes]
+    }
+
+    component "Business Logic" as BusinessLogic #EC407A {
+        [Auth Service]
+        [Todo Service]
+        [Stats Service]
+        [Achievement Service]
+    }
+
+    component "Middleware" as Middleware #AB47BC {
+        [Authentication]
+        [Validation]
+        [Error Handler]
+        [Rate Limiter]
+    }
+}
+
+' データ層
+package "データ層" {
+    database "MongoDB" as MongoDB #50C878 {
+        [users]
+        [todos]
+        [progress]
+        [achievements]
+        [stats]
+    }
+
+    database "Redis" as Redis #DC143C {
+        [Session Cache]
+        [Stats Cache]
+        [Notification Queue]
+    }
+}
+
+' 外部サービス
+cloud "外部サービス" {
+    [Firebase Auth] #FFA000
+    [Firebase Messaging] #FF6F00
+    [CDN] #00ACC1
+}
+
+' 接続関係
+[Webブラウザ] --> [Service Worker] : PWA機能
+[Webブラウザ] --> ReactApp : ユーザー操作
+[Service Worker] --> [IndexedDB] : オフラインデータ
+ReactApp --> StateManagement : 状態管理
+StateManagement --> FrontServices : API呼び出し
+FrontServices --> [IndexedDB] : ローカル保存
+
+FrontServices -down-> ExpressAPI : REST API / HTTPS
+FrontServices --> [Firebase Auth] : 認証
+FrontServices --> [Firebase Messaging] : プッシュ通知
+
+ExpressAPI --> Middleware : リクエスト処理
+Middleware --> BusinessLogic : ビジネスロジック
+BusinessLogic --> MongoDB : データ永続化
+BusinessLogic --> Redis : キャッシュ/セッション
+ExpressAPI --> [Firebase Auth] : トークン検証
+
+[CDN] -up-> [Webブラウザ] : 静的ファイル配信
+
+note right of ReactApp
+  - Vite + React + TypeScript
+  - PWA対応
+  - レスポンシブデザイン
+end note
+
+note right of MongoDB
+  - ユーザーデータ
+  - TODO・進捗データ
+  - 統計データ
+  - 実績データ
+end note
+
+note right of Redis
+  - セッション管理
+  - 統計キャッシュ
+  - リアルタイム同期
+end note
+
+@enduml

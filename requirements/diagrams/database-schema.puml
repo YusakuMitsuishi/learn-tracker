@@ -1,0 +1,205 @@
+@startuml データベーススキーマ図
+
+!define TABLE_COLOR #E3F2FD
+!define KEY_COLOR #BBDEFB
+
+skinparam backgroundColor #FAFAFA
+skinparam classAttributeIconSize 0
+
+title 学習継続支援アプリ - データベーススキーマ
+
+entity "users" as users {
+  **_id** : ObjectId <<PK>>
+  --
+  email : String <<Unique>>
+  username : String
+  firebaseUid : String <<Unique>>
+  --
+  **profile** : Object
+    displayName : String
+    avatar : String
+    timezone : String
+  --
+  **settings** : Object
+    theme : String
+    displayInterval : Number
+    notificationsEnabled : Boolean
+    soundEnabled : Boolean
+    celebrationLevel : String
+  --
+  createdAt : Date
+  updatedAt : Date
+}
+
+entity "todos" as todos {
+  **_id** : ObjectId <<PK>>
+  **userId** : ObjectId <<FK>>
+  --
+  title : String
+  description : String
+  category : String
+  --
+  goalType : String
+  goalValue : Number
+  currentValue : Number
+  unit : String
+  --
+  priority : String
+  deadline : Date
+  status : String
+  --
+  createdAt : Date
+  updatedAt : Date
+}
+
+entity "progress" as progress {
+  **_id** : ObjectId <<PK>>
+  **userId** : ObjectId <<FK>>
+  **todoId** : ObjectId <<FK>>
+  --
+  value : Number
+  note : String
+  timestamp : Date
+  --
+  **location** : Object
+    type : String
+    coordinates : [Number]
+  --
+  createdAt : Date
+}
+
+entity "achievements" as achievements {
+  **_id** : ObjectId <<PK>>
+  **userId** : ObjectId <<FK>>
+  --
+  type : String
+  title : String
+  description : String
+  icon : String
+  --
+  **condition** : Object
+    type : String
+    target : Number
+    category : String
+  --
+  unlocked : Boolean
+  unlockedAt : Date
+  createdAt : Date
+}
+
+entity "stats" as stats {
+  **_id** : ObjectId <<PK>>
+  **userId** : ObjectId <<FK>>
+  --
+  date : Date <<Index>>
+  --
+  totalTodos : Number
+  completedTodos : Number
+  totalTime : Number
+  --
+  **categoryBreakdown** : [Object]
+    category : String
+    time : Number
+    count : Number
+  --
+  streak : Number
+  createdAt : Date
+}
+
+entity "notifications" as notifications {
+  **_id** : ObjectId <<PK>>
+  **userId** : ObjectId <<FK>>
+  --
+  type : String
+  title : String
+  message : String
+  --
+  read : Boolean
+  readAt : Date
+  --
+  **data** : Object
+  --
+  scheduledFor : Date
+  sentAt : Date
+  createdAt : Date
+}
+
+' リレーション
+users ||--o{ todos : "1:N"
+users ||--o{ progress : "1:N"
+users ||--o{ achievements : "1:N"
+users ||--o{ stats : "1:N"
+users ||--o{ notifications : "1:N"
+
+todos ||--o{ progress : "1:N"
+
+note right of users
+  **インデックス:**
+  - email (unique)
+  - firebaseUid (unique)
+  - createdAt
+end note
+
+note right of todos
+  **インデックス:**
+  - userId + status
+  - userId + deadline
+  - userId + category
+
+  **status値:**
+  - active
+  - completed
+  - archived
+
+  **priority値:**
+  - high
+  - medium
+  - low
+end note
+
+note right of progress
+  **インデックス:**
+  - userId + timestamp
+  - todoId + timestamp
+  - timestamp (降順)
+
+  **集計クエリの最適化:**
+  複合インデックスで
+  日次・週次・月次集計を高速化
+end note
+
+note right of achievements
+  **インデックス:**
+  - userId + unlocked
+  - userId + type
+
+  **type値:**
+  - streak (連続記録)
+  - milestone (マイルストーン)
+  - total (累計記録)
+  - hidden (隠し実績)
+end note
+
+note right of stats
+  **インデックス:**
+  - userId + date (unique)
+  - date (降順)
+
+  **日次集計:**
+  毎日深夜にバッチ処理で
+  前日分の統計を計算・保存
+end note
+
+note bottom of notifications
+  **インデックス:**
+  - userId + read + createdAt
+  - scheduledFor
+
+  **type値:**
+  - reminder
+  - achievement
+  - streak_alert
+  - daily_summary
+end note
+
+@enduml

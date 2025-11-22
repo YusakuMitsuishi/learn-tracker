@@ -1,0 +1,313 @@
+@startuml コンポーネント図
+
+!define COMPONENT_COLOR #4A90E2
+!define PACKAGE_COLOR #E8EAF6
+
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+
+title React アプリケーション - コンポーネント構成図
+
+package "App Root" #E8EAF6 {
+    [App.tsx] as App
+
+    package "Pages" #FFF9C4 {
+        [DisplayModePage] as DisplayPage
+        [InputModePage] as InputPage
+        [StatsPage] as StatsPage
+        [SettingsPage] as SettingsPage
+        [LoginPage] as LoginPage
+    }
+}
+
+package "Display Mode Components" #E1F5FE {
+    [DisplayContainer] as DisplayContainer
+
+    package "Display Views" {
+        [TodoListView] as TodoListView
+        [ProgressView] as ProgressView
+        [CalendarView] as CalendarView
+        [StatsView] as StatsView
+        [MotivationView] as MotivationView
+    }
+}
+
+package "TODO Components" #F1F8E9 {
+    [TodoForm] as TodoForm
+    [TodoList] as TodoList
+    [TodoItem] as TodoItem
+    [ProgressInput] as ProgressInput
+}
+
+package "Stats Components" #FCE4EC {
+    [DashboardView] as DashboardView
+    [ChartWrapper] as ChartWrapper
+    [StreakDisplay] as StreakDisplay
+    [ReportGenerator] as ReportGenerator
+}
+
+package "Celebration Components" #FFF3E0 {
+    [Confetti] as Confetti
+    [Fireworks] as Fireworks
+    [BadgeDisplay] as BadgeDisplay
+    [AchievementNotification] as AchievementNotif
+}
+
+package "Settings Components" #F3E5F5 {
+    [SettingsPanel] as SettingsPanel
+    [ThemeSelector] as ThemeSelector
+    [NotificationSettings] as NotificationSettings
+    [DataExport] as DataExport
+}
+
+package "Common Components" #ECEFF1 {
+    [Button] as Button
+    [Input] as Input
+    [Modal] as Modal
+    [Loading] as Loading
+    [ErrorBoundary] as ErrorBoundary
+}
+
+package "Hooks" #DCEDC8 {
+    component "Custom Hooks" {
+        [useTodo]
+        [useAuth]
+        [useProgress]
+        [useStats]
+        [useNotification]
+        [useTheme]
+    }
+}
+
+package "State Management" #B2DFDB {
+    component "Redux Store" {
+        [authSlice]
+        [todoSlice]
+        [progressSlice]
+        [statsSlice]
+        [settingsSlice]
+        [uiSlice]
+    }
+
+    component "Middleware" {
+        [syncMiddleware]
+        [offlineMiddleware]
+    }
+}
+
+package "Services" #D1C4E9 {
+    [API Client] as ApiClient
+    [Firebase Auth] as FirebaseAuth
+    [IndexedDB Service] as IndexedDBService
+    [Notification Service] as NotificationService
+}
+
+' App Root の接続
+App --> DisplayPage
+App --> InputPage
+App --> StatsPage
+App --> SettingsPage
+App --> LoginPage
+App --> ErrorBoundary
+
+' Display Mode の接続
+DisplayPage --> DisplayContainer
+DisplayContainer --> TodoListView
+DisplayContainer --> ProgressView
+DisplayContainer --> CalendarView
+DisplayContainer --> StatsView
+DisplayContainer --> MotivationView
+
+' Input Mode の接続
+InputPage --> TodoForm
+InputPage --> TodoList
+TodoList --> TodoItem
+InputPage --> ProgressInput
+
+' Stats Page の接続
+StatsPage --> DashboardView
+DashboardView --> ChartWrapper
+DashboardView --> StreakDisplay
+DashboardView --> ReportGenerator
+
+' Settings Page の接続
+SettingsPage --> SettingsPanel
+SettingsPanel --> ThemeSelector
+SettingsPanel --> NotificationSettings
+SettingsPanel --> DataExport
+
+' Celebration Components の接続
+DisplayContainer ..> Confetti : 演出トリガー
+DisplayContainer ..> Fireworks : 演出トリガー
+InputPage ..> AchievementNotif : 実績解除時
+DashboardView ..> BadgeDisplay : バッジ表示
+
+' Common Components の使用
+TodoForm --> Button
+TodoForm --> Input
+SettingsPanel --> Modal
+DisplayContainer --> Loading
+
+' Hooks の使用
+DisplayPage --> [useTodo]
+DisplayPage --> [useProgress]
+InputPage --> [useTodo]
+InputPage --> [useProgress]
+StatsPage --> [useStats]
+SettingsPage --> [useTheme]
+SettingsPage --> [useNotification]
+LoginPage --> [useAuth]
+
+' Hooks から Store への接続
+[useTodo] --> [todoSlice]
+[useAuth] --> [authSlice]
+[useProgress] --> [progressSlice]
+[useStats] --> [statsSlice]
+[useTheme] --> [settingsSlice]
+
+' Store から Services への接続
+[todoSlice] --> ApiClient
+[progressSlice] --> ApiClient
+[statsSlice] --> ApiClient
+[authSlice] --> FirebaseAuth
+[syncMiddleware] --> IndexedDBService
+[offlineMiddleware] --> IndexedDBService
+
+' Services の接続
+ApiClient --> NotificationService : 実績解除通知
+
+note right of DisplayContainer
+  **責務:**
+  - 画面自動切り替え制御
+  - 各ビューの管理
+  - アニメーション制御
+end note
+
+note right of [useTodo]
+  **カスタムフック:**
+  - Redux の抽象化
+  - API 呼び出しの簡素化
+  - ローディング・エラー処理
+end note
+
+note right of [syncMiddleware]
+  **Middleware:**
+  - オフライン検知
+  - 自動同期
+  - 競合解決
+end note
+
+@enduml
+
+@startuml 状態遷移図 - ディスプレイモード
+
+skinparam backgroundColor #FAFAFA
+
+title ディスプレイモード - 画面遷移図
+
+[*] --> Idle : アプリ起動
+
+Idle --> DisplayMode : ユーザーが\nディスプレイモード開始
+
+state DisplayMode {
+    [*] --> TodoList
+
+    TodoList : 本日のTODOリスト
+    TodoList : - 目標一覧
+    TodoList : - 進捗状況
+    TodoList : - 優先度表示
+
+    ProgressView : 進捗グラフ
+    ProgressView : - 棒グラフ
+    ProgressView : - 折れ線グラフ
+    ProgressView : - 達成率表示
+
+    Calendar : 継続カレンダー
+    Calendar : - ヒートマップ
+    Calendar : - 連続記録表示
+    Calendar : - 最長記録表示
+
+    StatsView : 統計レポート
+    StatsView : - 週次サマリー
+    StatsView : - 月次サマリー
+    StatsView : - カテゴリ別分析
+
+    Motivation : 応援メッセージ
+    Motivation : - 日替わりメッセージ
+    Motivation : - モチベーションTips
+    Motivation : - 名言表示
+
+    TodoList --> ProgressView : 10秒後\n（自動）
+    ProgressView --> Calendar : 10秒後\n（自動）
+    Calendar --> StatsView : 10秒後\n（自動）
+    StatsView --> Motivation : 10秒後\n（自動）
+    Motivation --> TodoList : 10秒後\n（自動）
+
+    TodoList --> ProgressView : スワイプ/クリック\n（手動）
+    ProgressView --> Calendar : スワイプ/クリック
+    Calendar --> StatsView : スワイプ/クリック
+    StatsView --> Motivation : スワイプ/クリック
+    Motivation --> TodoList : スワイプ/クリック
+
+    state Celebration {
+        [*] --> ShowAnimation
+        ShowAnimation : アニメーション再生
+        ShowAnimation : - 紙吹雪/花火
+        ShowAnimation : - 効果音
+        ShowAnimation : - メッセージ表示
+
+        ShowAnimation --> ShowBadge : 3秒後
+        ShowBadge : バッジ表示
+        ShowBadge : - アイコン
+        ShowBadge : - 説明文
+
+        ShowBadge --> [*] : 5秒後 or\nユーザーがスキップ
+    }
+
+    TodoList --> Celebration : 実績解除\nイベント発生
+    ProgressView --> Celebration : 目標達成\nイベント発生
+    Celebration --> TodoList : 演出終了後
+}
+
+DisplayMode --> InputMode : クイック記録\nボタン押下
+DisplayMode --> SettingsMode : 設定ボタン押下
+DisplayMode --> Idle : 終了ボタン押下
+
+state InputMode {
+    [*] --> SelectTodo
+    SelectTodo --> InputProgress
+    InputProgress --> Confirm
+    Confirm --> [*] : 保存完了
+}
+
+InputMode --> DisplayMode : キャンセル or\n保存完了後
+
+state SettingsMode {
+    [*] --> EditSettings
+    EditSettings : - テーマ変更
+    EditSettings : - 表示間隔調整
+    EditSettings : - 通知設定
+    EditSettings : [*] : 設定完了
+}
+
+SettingsMode --> DisplayMode : 戻るボタン
+
+note right of DisplayMode
+  **自動モード:**
+  設定した間隔（デフォルト10秒）で
+  自動的に画面を切り替え
+
+  **手動モード:**
+  スワイプやクリックで
+  任意の画面へ移動可能
+end note
+
+note right of Celebration
+  **演出レベル:**
+  - 控えめ（1秒）
+  - 通常（3秒）
+  - 派手（5秒）
+  ユーザーが設定で選択可能
+end note
+
+@enduml

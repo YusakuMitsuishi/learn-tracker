@@ -1,0 +1,472 @@
+@startuml Supabase PostgreSQL スキーマ図
+
+!define TABLE_COLOR #E3F2FD
+!define KEY_COLOR #BBDEFB
+
+skinparam backgroundColor #FAFAFA
+skinparam classAttributeIconSize 0
+
+title 学習継続支援アプリ - Supabase PostgreSQL スキーマ
+
+entity "auth.users" as auth_users <<Supabase Auth>> {
+  **id** : UUID <<PK>>
+  --
+  email : TEXT
+  encrypted_password : TEXT
+  email_confirmed_at : TIMESTAMPTZ
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "profiles" as profiles {
+  **id** : UUID <<PK, FK>>
+  --
+  username : TEXT <<Unique>>
+  display_name : TEXT
+  avatar_url : TEXT
+  timezone : TEXT
+  --
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "settings" as settings {
+  **id** : UUID <<PK>>
+  **user_id** : UUID <<FK, Unique>>
+  --
+  theme : TEXT
+  display_interval : INTEGER
+  notifications_enabled : BOOLEAN
+  sound_enabled : BOOLEAN
+  celebration_level : TEXT
+  --
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "todos" as todos {
+  **id** : UUID <<PK>>
+  **user_id** : UUID <<FK>>
+  --
+  title : TEXT
+  description : TEXT
+  category : TEXT
+  --
+  goal_type : TEXT
+  goal_value : NUMERIC
+  current_value : NUMERIC
+  unit : TEXT
+  --
+  priority : TEXT
+  deadline : TIMESTAMPTZ
+  status : TEXT
+  --
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "progress" as progress {
+  **id** : UUID <<PK>>
+  **user_id** : UUID <<FK>>
+  **todo_id** : UUID <<FK>>
+  --
+  value : NUMERIC
+  note : TEXT
+  timestamp : TIMESTAMPTZ
+  --
+  created_at : TIMESTAMPTZ
+}
+
+entity "achievements" as achievements {
+  **id** : UUID <<PK>>
+  **user_id** : UUID <<FK>>
+  --
+  type : TEXT
+  title : TEXT
+  description : TEXT
+  icon : TEXT
+  --
+  condition : JSONB
+  --
+  unlocked : BOOLEAN
+  unlocked_at : TIMESTAMPTZ
+  created_at : TIMESTAMPTZ
+}
+
+entity "stats" as stats {
+  **id** : UUID <<PK>>
+  **user_id** : UUID <<FK>>
+  --
+  date : DATE <<Unique>>
+  --
+  total_todos : INTEGER
+  completed_todos : INTEGER
+  total_time : NUMERIC
+  --
+  category_breakdown : JSONB
+  streak : INTEGER
+  --
+  created_at : TIMESTAMPTZ
+}
+
+' リレーション
+auth_users ||--|| profiles : "1:1"
+profiles ||--o| settings : "1:1"
+profiles ||--o{ todos : "1:N"
+profiles ||--o{ progress : "1:N"
+profiles ||--o{ achievements : "1:N"
+profiles ||--o{ stats : "1:N"
+
+todos ||--o{ progress : "1:N"
+
+note right of auth_users
+  **Supabase Auth管理テーブル**
+  - Supabaseが自動管理
+  - 認証情報を保持
+  - カスタマイズ不可
+
+  **認証方法:**
+  - Email/Password
+  - OAuth (Google, GitHub等)
+  - Magic Link
+end note
+
+note right of profiles
+  **インデックス:**
+  - id (PK, auth.users参照)
+  - username (unique)
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = id
+  UPDATE: auth.uid() = id
+
+  **トリガー:**
+  - updated_at自動更新
+end note
+
+note right of todos
+  **インデックス:**
+  - id (PK)
+  - user_id (FK)
+  - (user_id, status)
+  - (user_id, deadline)
+  - (user_id, category)
+
+  **status値:**
+  - active (進行中)
+  - completed (完了)
+  - archived (アーカイブ)
+
+  **goal_type値:**
+  - time (時間)
+  - distance (距離)
+  - count (回数)
+  - weight (重量)
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = user_id
+  INSERT: auth.uid() = user_id
+  UPDATE: auth.uid() = user_id
+  DELETE: auth.uid() = user_id
+
+  **リアルタイム同期: 有効**
+end note
+
+note right of progress
+  **インデックス:**
+  - id (PK)
+  - user_id (FK)
+  - todo_id (FK)
+  - (user_id, timestamp DESC)
+  - (todo_id, timestamp DESC)
+
+  **用途:**
+  - 日々の進捗記録
+  - グラフ描画用データ
+  - 統計計算のソース
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = user_id
+  INSERT: auth.uid() = user_id
+
+  **リアルタイム同期: 有効**
+end note
+
+note right of achievements
+  **インデックス:**
+  - id (PK)
+  - user_id (FK)
+  - (user_id, unlocked)
+  - (user_id, type)
+
+  **type値:**
+  - streak (連続記録)
+  - milestone (マイルストーン)
+  - total (累計記録)
+  - hidden (隠し実績)
+
+  **condition例（JSONB）:**
+  {
+    "type": "streak",
+    "target": 7,
+    "category": null
+  }
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = user_id
+  UPDATE: auth.uid() = user_id
+    AND NOT unlocked
+    (未解除のみ更新可能)
+
+  **リアルタイム同期: 有効**
+end note
+
+note right of stats
+  **インデックス:**
+  - id (PK)
+  - user_id (FK)
+  - (user_id, date DESC) unique
+
+  **category_breakdown例（JSONB）:**
+  [
+    {
+      "category": "学習",
+      "time": 120,
+      "count": 2
+    }
+  ]
+
+  **集計方法:**
+  - Edge Functionで日次バッチ処理
+  - または、クライアント側で計算
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = user_id
+  INSERT: auth.uid() = user_id
+end note
+
+note bottom of settings
+  **デフォルト値:**
+  - theme: 'light'
+  - display_interval: 10
+  - notifications_enabled: true
+  - sound_enabled: true
+  - celebration_level: 'normal'
+
+  **RLSポリシー:**
+  SELECT: auth.uid() = user_id
+  UPDATE: auth.uid() = user_id
+end note
+
+@enduml
+
+@startuml Row Level Security (RLS) ポリシー詳細
+
+skinparam backgroundColor #FAFAFA
+
+title Row Level Security (RLS) ポリシー設計
+
+package "Supabase RLS Policies" {
+
+  component "profiles テーブル" as profiles_rls {
+    [SELECT Policy]
+    [UPDATE Policy]
+  }
+
+  component "todos テーブル" as todos_rls {
+    [SELECT Policy]
+    [INSERT Policy]
+    [UPDATE Policy]
+    [DELETE Policy]
+  }
+
+  component "progress テーブル" as progress_rls {
+    [SELECT Policy]
+    [INSERT Policy]
+  }
+
+  component "achievements テーブル" as achievements_rls {
+    [SELECT Policy]
+    [UPDATE Policy]
+  }
+
+  component "stats テーブル" as stats_rls {
+    [SELECT Policy]
+    [INSERT Policy]
+  }
+
+  component "settings テーブル" as settings_rls {
+    [SELECT Policy]
+    [UPDATE Policy]
+  }
+}
+
+note right of profiles_rls
+  **SELECT Policy:**
+  CREATE POLICY "Users can view own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
+
+  **UPDATE Policy:**
+  CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
+end note
+
+note right of todos_rls
+  **SELECT Policy:**
+  CREATE POLICY "Users can view own todos"
+  ON todos FOR SELECT
+  USING (auth.uid() = user_id);
+
+  **INSERT Policy:**
+  CREATE POLICY "Users can insert own todos"
+  ON todos FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+  **UPDATE Policy:**
+  CREATE POLICY "Users can update own todos"
+  ON todos FOR UPDATE
+  USING (auth.uid() = user_id);
+
+  **DELETE Policy:**
+  CREATE POLICY "Users can delete own todos"
+  ON todos FOR DELETE
+  USING (auth.uid() = user_id);
+end note
+
+note right of progress_rls
+  **SELECT Policy:**
+  CREATE POLICY "Users can view own progress"
+  ON progress FOR SELECT
+  USING (auth.uid() = user_id);
+
+  **INSERT Policy:**
+  CREATE POLICY "Users can insert own progress"
+  ON progress FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+  **特記事項:**
+  UPDATE/DELETEは不要
+  （進捗は記録のみ、変更不可）
+end note
+
+note bottom of achievements_rls
+  **SELECT Policy:**
+  CREATE POLICY "Users can view own achievements"
+  ON achievements FOR SELECT
+  USING (auth.uid() = user_id);
+
+  **UPDATE Policy:**
+  CREATE POLICY "Users can unlock own achievements"
+  ON achievements FOR UPDATE
+  USING (
+    auth.uid() = user_id
+    AND unlocked = false
+  )
+  WITH CHECK (
+    auth.uid() = user_id
+    AND unlocked = true
+  );
+
+  **セキュリティ:**
+  未解除の実績のみ解除可能
+  既に解除済みは変更不可
+end note
+
+@enduml
+
+@startuml データベース関数とトリガー
+
+skinparam backgroundColor #FAFAFA
+
+title PostgreSQL 関数とトリガー
+
+package "Database Functions" {
+
+  component "updated_at自動更新" as updated_at {
+    [Trigger Function]
+    [Before Update Trigger]
+  }
+
+  component "stats日次集計" as stats_aggregation {
+    [Edge Function]
+    [Cron Job]
+  }
+
+  component "achievement自動チェック" as achievement_check {
+    [Edge Function]
+    [After Insert Trigger]
+  }
+
+  component "current_value自動計算" as current_value {
+    [Trigger Function]
+    [After Insert on Progress]
+  }
+}
+
+note right of updated_at
+  **関数定義:**
+  CREATE OR REPLACE FUNCTION update_updated_at()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  **トリガー適用:**
+  CREATE TRIGGER update_profiles_updated_at
+    BEFORE UPDATE ON profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+  (todos, settings も同様)
+end note
+
+note right of stats_aggregation
+  **Edge Function (Deno):**
+  - 毎日深夜0時に実行
+  - 前日のprogressを集計
+  - statsテーブルに保存
+
+  **集計内容:**
+  - 総TODO数
+  - 完了TODO数
+  - 総学習時間
+  - カテゴリ別内訳
+  - 連続記録日数
+end note
+
+note right of achievement_check
+  **Edge Function:**
+  - progressが追加されたときに実行
+  - 実績の条件をチェック
+  - 条件達成時にunlocked=trueに更新
+
+  **チェック内容:**
+  - 7日連続達成
+  - 累計100時間
+  - 特定カテゴリ達成
+end note
+
+note right of current_value
+  **Trigger Function:**
+  CREATE OR REPLACE FUNCTION update_todo_current_value()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    UPDATE todos
+    SET current_value = current_value + NEW.value
+    WHERE id = NEW.todo_id;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  **トリガー:**
+  CREATE TRIGGER update_current_value_on_progress
+    AFTER INSERT ON progress
+    FOR EACH ROW
+    EXECUTE FUNCTION update_todo_current_value();
+end note
+
+@enduml
