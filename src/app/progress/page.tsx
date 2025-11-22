@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 interface Todo {
   id: string;
   title: string;
