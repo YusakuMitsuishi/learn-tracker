@@ -30,11 +30,19 @@ export default function TodosPage() {
   const [expandedTodoId, setExpandedTodoId] = useState<string | null>(null);
 
   // フォーム用の状態
-  const [todoForm, setTodoForm] = useState({
+  const [todoForm, setTodoForm] = useState<{
+    title: string;
+    description: string;
+    category: string;
+    priority: 'low' | 'medium' | 'high';
+    goal_type: string;
+    goal_value: string;
+    unit: string;
+  }>({
     title: '',
     description: '',
     category: '',
-    priority: 'medium' as const,
+    priority: 'medium',
     goal_type: 'count',
     goal_value: '',
     unit: '',
