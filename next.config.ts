@@ -1,17 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '2mb',
-    },
-  },
-  // Vercelでの動的レンダリングを保証
-  ...(process.env.VERCEL && {
-    generateBuildId: async () => {
-      return 'build-' + Date.now();
-    },
-  }),
+  // 空の設定（デフォルトの動的レンダリングを使用）
 };
 
 export default nextConfig;
