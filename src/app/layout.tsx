@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: '学習や運動の継続をサポートするアプリ',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: Readonly<{
